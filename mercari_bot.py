@@ -17,7 +17,12 @@ CHAT_ID = "1102153006"
 CHECK_INTERVAL = 30
 WAIT_SECONDS = 15
 HEADLESS = True
-JPY_TO_EUR = 0.0062  # cambia la tasa según convenga
+CURRENCY_RATES = {
+    "¥": 0.0062,   # JPY → EUR
+    "€": 1.0,      # EUR → EUR
+    "SEK": 0.089,  # SEK → EUR (ejemplo, actualízala según corresponda)
+    "USD": 0.93    # USD → EUR (ejemplo)
+}
 
 # --- FILE ---
 def load_seen():
@@ -77,17 +82,15 @@ def fetch_products(driver):
             number_el = price_block.find_element(By.CSS_SELECTOR, "span[class^='number']")
             currency = currency_el.text.strip()
             number = number_el.text.strip().replace(",", "")
-            price_text = ""
 
-            if currency == "¥":
-                yen = int(number)
-                eur = round(yen * JPY_TO_EUR, 2)
-                price_text = f"{yen}¥ (~{eur} €)"
-            elif currency == "€":
-                eur = float(number)
+            amount = float(number)
+
+            if currency in CURRENCY_RATES:
+                eur = round(amount * CURRENCY_RATES[currency], 2)
                 price_text = f"{eur} €"
             else:
-                price_text = f"{currency}{number}"
+                # moneda desconocida: no convierte
+                price_text = f"{amount} {currency} (sin conversión)"
 
             products.append({"id": pid, "url": href, "price": price_text})
         except Exception:
