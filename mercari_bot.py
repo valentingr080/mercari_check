@@ -138,44 +138,114 @@ def fetch_neokyo(driver):
         
     return products
 
-
-def fetch_products(driver):
+def fetch_yahoo_auctions(driver):
+    URL = "https://auctions.yahoo.co.jp/search/search?p=%E3%82%A4%E3%83%8A%E3%82%BA%E3%83%9E%E3%82%A4%E3%83%AC%E3%83%96%E3%83%B3&va=%E3%82%A4%E3%83%8A%E3%82%BA%E3%83%9E%E3%82%A4%E3%83%AC%E3%83%96%E3%83%B3&is_postage_mode=1&dest_pref_code=13&b=1&n=50&s1=new&o1=d"
+    JPY_TO_EUR = 0.0062  # mismo que los demás
     driver.get(URL)
+
     try:
         wait = WebDriverWait(driver, WAIT_SECONDS)
-        wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "li[data-testid='item-cell']")))
-    except Exception:
+        wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "ul.Product__items > li.Product")))
+    except:
         pass
 
-    items = driver.find_elements(By.CSS_SELECTOR, "li[data-testid='item-cell']")
+    items = driver.find_elements(By.CSS_SELECTOR, "ul.Product__items > li.Product")
     products = []
 
     for li in items:
         try:
-            a = li.find_element(By.CSS_SELECTOR, "a[href*='/item/']")
-            href = a.get_attribute("href")
-            pid = href.rstrip("/").split("/")[-1]
+            # enlace + id
+            a_tag = li.find_element(By.CSS_SELECTOR, "a.Product__imageLink")
+            href = a_tag.get_attribute("href")
+            pid = a_tag.get_attribute("data-auction-id")
 
-            # precio
-            price_block = li.find_element(By.CSS_SELECTOR, "span.merPrice")
-            currency_el = price_block.find_element(By.CSS_SELECTOR, "span[class^='currency']")
-            number_el = price_block.find_element(By.CSS_SELECTOR, "span[class^='number']")
-            currency = currency_el.text.strip()
-            number = number_el.text.strip().replace(",", "")
+            # imagen
+            try:
+                img_tag = a_tag.find_element(By.CSS_SELECTOR, "img.Product__imageData")
+                image_url = img_tag.get_attribute("src")
+            except:
+                image_url = None
 
-            amount = float(number)
+            # precio de subasta inicial (obligatorio)
+            try:
+                auction_price_el = li.find_element(By.CSS_SELECTOR, "span.Product__priceValue.u-textRed")
+                auction_price_raw = auction_price_el.text.strip().replace("円", "").replace(",", "")
+                auction_price_jpy = int(auction_price_raw)
+                auction_price_eur = round(auction_price_jpy * JPY_TO_EUR, 2)
+                auction_price_text = f"{auction_price_jpy} ¥ (~{auction_price_eur} €)"
+            except:
+                auction_price_text = "desconocido"
 
-            if currency in CURRENCY_RATES:
-                eur = round(amount * CURRENCY_RATES[currency], 2)
-                price_text = f"{eur} €"
+            # precio de compra directa (opcional)
+            direct_price_text = None
+            try:
+                direct_price_el = li.find_element(By.CSS_SELECTOR, "span.Product__priceValue:not(.u-textRed)")
+                direct_price_raw = direct_price_el.text.strip().replace("円", "").replace(",", "")
+                direct_price_jpy = int(direct_price_raw)
+                direct_price_eur = round(direct_price_jpy * JPY_TO_EUR, 2)
+                direct_price_text = f"{direct_price_jpy} ¥ (~{direct_price_eur} €)"
+            except:
+                pass
+
+            # mensaje de precio final
+            if direct_price_text:
+                price_text = f"Subasta: {auction_price_text}\nCompra directa: {direct_price_text}"
             else:
-                # moneda desconocida: no convierte
-                price_text = f"{amount} {currency} (sin conversión)"
+                price_text = f"Subasta: {auction_price_text}"
 
-            products.append({"id": pid, "url": href, "price": price_text})
-        except Exception:
+            products.append({
+                "id": pid,
+                "url": href,
+                "price": price_text,
+                "image": image_url
+            })
+        except Exception as e:
+            print("[Yahoo ERROR]", e)
             continue
+
     return products
+
+
+
+def fetch_products(driver, urls):
+    products = []
+    for url in urls:
+        driver.get(url)
+        try:
+            wait = WebDriverWait(driver, WAIT_SECONDS)
+            wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "li[data-testid='item-cell']")))
+        except Exception:
+            pass
+
+        items = driver.find_elements(By.CSS_SELECTOR, "li[data-testid='item-cell']")
+        for li in items:
+            try:
+                a = li.find_element(By.CSS_SELECTOR, "a[href*='/item/']")
+                href = a.get_attribute("href")
+                pid = href.rstrip("/").split("/")[-1]
+
+                # precio
+                price_block = li.find_element(By.CSS_SELECTOR, "span.merPrice")
+                currency_el = price_block.find_element(By.CSS_SELECTOR, "span[class^='currency']")
+                number_el = price_block.find_element(By.CSS_SELECTOR, "span[class^='number']")
+                currency = currency_el.text.strip()
+                number = number_el.text.strip().replace(",", "")
+
+                amount = float(number)
+
+                if currency in CURRENCY_RATES:
+                    eur = round(amount * CURRENCY_RATES[currency], 2)
+                    price_text = f"{eur} €"
+                else:
+                    price_text = f"{amount} {currency} (sin conversión)"
+
+                products.append({"id": pid, "url": href, "price": price_text})
+            except Exception:
+                continue
+
+    # eliminar duplicados por ID
+    unique = {p["id"]: p for p in products}
+    return list(unique.values())
 
 # --- FILE --- 
 def load_seen(file):
@@ -193,7 +263,8 @@ def main():
     seen_files = {
         "mercari": "seen_products_mercar.txt",
         "fril": "seen_products_fril.txt",
-        "neokyo": "seen_products_neokyo.txt"
+        "neokyo": "seen_products_neokyo.txt",
+        "yahoo": "seen_products_yahoo.txt"
     }
 
     seen = {source: load_seen(file) for source, file in seen_files.items()}
@@ -202,9 +273,13 @@ def main():
     try:
         while True:
             all_products = {
-                "mercari": fetch_products(driver),
+                "mercari": fetch_products(driver, [
+                    "https://jp.mercari.com/search?keyword=%20%E3%82%A4%E3%83%8A%E3%82%BA%E3%83%9E%E3%82%A4%E3%83%AC%E3%83%96%E3%83%B3&order=desc&sort=created_time",
+                    "https://jp.mercari.com/search?keyword=%20%E3%82%A4%E3%83%8A%E3%82%BA%E3%83%9E%E3%82%A4%E3%83%AC%E3%83%96%E3%83%B3TCG&order=desc&sort=created_time"
+                ]),
                 "fril": fetch_fril(driver),
                 "neokyo": fetch_neokyo(driver)
+                # "yahoo": fetch_yahoo_auctions(driver)
             }
 
             for source, products in all_products.items():
@@ -218,7 +293,6 @@ def main():
                             send_telegram_photo(p["image"], caption=msg)
                         else:
                             send_telegram_message(msg)
-                        # send_telegram_message(msg)
                         print("[NOTIF]", msg)
                         found += 1
                 if found == 0:
