@@ -8,18 +8,23 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
+from selenium.webdriver.common.keys import Keys
+import threading
+
 
 # --- CONFIG ---
 URL = "https://jp.mercari.com/search?keyword=%20%E3%82%A4%E3%83%8A%E3%82%BA%E3%83%9E%E3%82%A4%E3%83%AC%E3%83%96%E3%83%B3&order=desc&sort=created_time"
 SEEN_FILE = "seen_products.txt"
 TELEGRAM_TOKEN = "7554414339:AAF4eXm8gRJ7bevSf3b5maXoQUvskSinxnM"
 CHAT_ID = "1102153006"
-CHECK_INTERVAL = 30
+CHECK_INTERVAL = 1
+OTHERS_INTERVAL = 15
+SURUGAYA_INTERVAL = 300   # cada cuánto revisar surugaya (1 hora)
 WAIT_SECONDS = 15
 HEADLESS = True
 CURRENCY_RATES = {
-    "¥": 0.0062,   # JPY → EUR
+    "¥": 0.0057,   # JPY → EUR
     "€": 1.0,      # EUR → EUR
     "SEK": 0.089,  # SEK → EUR (ejemplo, actualízala según corresponda)
     "USD": 0.93    # USD → EUR (ejemplo)
@@ -69,8 +74,11 @@ def fetch_fril(driver):
     except:
         pass
 
-    section = driver.find_element(By.CSS_SELECTOR, "section.view.view_grid")
-    links = section.find_elements(By.CSS_SELECTOR, "a[href*='item.fril.jp']")
+    try:
+        section = driver.find_element(By.CSS_SELECTOR, "section.view.view_grid")
+        links = section.find_elements(By.CSS_SELECTOR, "a[href*='item.fril.jp']")
+    except ( StaleElementReferenceException, NoSuchElementException ):
+        links = []  # o simplemente continue si estás en un loop
     products = []
 
     for a in links:
@@ -206,46 +214,90 @@ def fetch_yahoo_auctions(driver):
     return products
 
 
+def trigger_search_again(driver):
+    wait = WebDriverWait(driver, 10)
 
-def fetch_products(driver, urls):
+    search_button = wait.until(
+        EC.presence_of_element_located(
+            (By.CSS_SELECTOR, "div[data-testid='search-submit-button'] button")
+        )
+    )
+
+    driver.execute_script("arguments[0].click();", search_button)
+    # driver.execute_script(
+    #     "arguments[0].scrollIntoView({block: 'center'});",
+    #     search_button
+    # )
+    # search_button.click()
+
+
+def wait_for_results_refresh(driver):
+    wait = WebDriverWait(driver, WAIT_SECONDS)
+
+    old_items = driver.find_elements(
+        By.CSS_SELECTOR, "li[data-testid='item-cell']"
+    )
+
+    if old_items:
+        wait.until(EC.staleness_of(old_items[0]))
+
+    wait.until(
+        EC.presence_of_all_elements_located(
+            (By.CSS_SELECTOR, "li[data-testid='item-cell']")
+        )
+    )
+
+
+def fetch_products(driver, url):
     products = []
-    for url in urls:
+
+    # Load once
+    if driver.current_url != url:
         driver.get(url)
+
+    # Trigger search again without full reload
+    trigger_search_again(driver)
+    # wait_for_results_refresh(driver)
+
+    items = driver.find_elements(
+        By.CSS_SELECTOR, "li[data-testid='item-cell']"
+    )
+
+    for li in items:
         try:
-            wait = WebDriverWait(driver, WAIT_SECONDS)
-            wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "li[data-testid='item-cell']")))
+            a = li.find_element(By.CSS_SELECTOR, "a[href*='/item/']")
+            href = a.get_attribute("href")
+            pid = href.rstrip("/").split("/")[-1]
+
+            price_block = li.find_element(By.CSS_SELECTOR, "span.merPrice")
+            currency_el = price_block.find_element(
+                By.CSS_SELECTOR, "span[class^='currency']"
+            )
+            number_el = price_block.find_element(
+                By.CSS_SELECTOR, "span[class^='number']"
+            )
+
+            currency = currency_el.text.strip()
+            number = number_el.text.strip().replace(",", "")
+            amount = float(number)
+
+            if currency in CURRENCY_RATES:
+                eur = round(amount * CURRENCY_RATES[currency], 2)
+                price_text = f"{eur} €"
+            else:
+                price_text = f"{amount} {currency} (sin conversión)"
+
+            products.append({
+                "id": pid,
+                "url": href,
+                "price": price_text
+            })
         except Exception:
-            pass
+            continue
 
-        items = driver.find_elements(By.CSS_SELECTOR, "li[data-testid='item-cell']")
-        for li in items:
-            try:
-                a = li.find_element(By.CSS_SELECTOR, "a[href*='/item/']")
-                href = a.get_attribute("href")
-                pid = href.rstrip("/").split("/")[-1]
-
-                # precio
-                price_block = li.find_element(By.CSS_SELECTOR, "span.merPrice")
-                currency_el = price_block.find_element(By.CSS_SELECTOR, "span[class^='currency']")
-                number_el = price_block.find_element(By.CSS_SELECTOR, "span[class^='number']")
-                currency = currency_el.text.strip()
-                number = number_el.text.strip().replace(",", "")
-
-                amount = float(number)
-
-                if currency in CURRENCY_RATES:
-                    eur = round(amount * CURRENCY_RATES[currency], 2)
-                    price_text = f"{eur} €"
-                else:
-                    price_text = f"{amount} {currency} (sin conversión)"
-
-                products.append({"id": pid, "url": href, "price": price_text})
-            except Exception:
-                continue
-
-    # eliminar duplicados por ID
     unique = {p["id"]: p for p in products}
     return list(unique.values())
+
 
 # --- FILE --- 
 def load_seen(file):
@@ -258,6 +310,89 @@ def append_seen(file, pid):
     with open(file, "a", encoding="utf-8") as f:
         f.write(pid + "\n")
 
+# --- SURUGAYA ---
+SURUGAYA_FILE = "surugaya_ids.txt"
+SURUGAYA_SEEN_FILE = "seen_surugaya_available.txt"
+
+def load_surugaya_ids():
+    if not os.path.exists(SURUGAYA_FILE):
+        print(f"[WARN] No se encontró {SURUGAYA_FILE}, crea el archivo con un ID por línea.")
+        return []
+    with open(SURUGAYA_FILE, "r", encoding="utf-8") as f:
+        return [line.strip() for line in f if line.strip()]
+
+def check_surugaya(driver, ids, seen_available):
+    base_url = "https://neokyo.com/es/product/surugaya/"
+    newly_available = []
+
+    for pid in ids:
+        url = base_url + pid
+        try:
+            driver.get(url)
+            wait = WebDriverWait(driver, WAIT_SECONDS)
+            wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+
+            # Comprobar si aparece el texto "Disponible" dentro de un <span class="text-success">
+            spans = driver.find_elements(By.CSS_SELECTOR, "span.text-success")
+            available = any("Disponible" in s.text for s in spans)
+
+            if available and pid not in seen_available:
+                msg = f"✅ Producto disponible en Surugaya\n{url}"
+                send_telegram_message(msg)
+                print("[SURUGAYA DISPONIBLE]", pid, url)
+                newly_available.append(pid)
+            # elif not available:
+            #     print(f"[SURUGAYA] No disponible: {pid}")
+        except Exception as e:
+            print(f"[SURUGAYA ERROR] {pid}: {e}")
+
+    # Guardar los nuevos disponibles
+    for pid in newly_available:
+        append_seen(SURUGAYA_SEEN_FILE, pid)
+
+    return newly_available
+
+
+def check_new_products_and_send_message(seen, seen_files, source, products):
+    found = 0
+    for p in products:
+        if p["id"] not in seen[source]:
+            seen[source].add(p["id"])
+            append_seen(seen_files[source], p["id"])
+
+            mercari_url = p["url"]
+
+            msg = (
+                f"Nuevo producto 🚨 ({source})\n"
+                f"{source}: {mercari_url}\n"
+                f"Precio: {p['price']}"
+            )
+
+            # Only add Doorzo link for Mercari
+            if source == "mercari":
+                doorzo_hex = mercari_url.encode("utf-8").hex()
+                doorzo_url = f"https://www.doorzo.com/es/mall/mercari/detail/{doorzo_hex}"
+                msg += f"\nDoorzo: {doorzo_url}"
+
+            if source == "neokyo" and "image" in p:
+                send_telegram_photo(p["image"], caption=msg)
+            else:
+                send_telegram_message(msg)
+
+            print("[NOTIF]", msg)
+            found += 1
+
+    if found == 0:
+        print(f"[INFO] Sin nuevos productos en {source}.")
+
+
+def surugaya_worker(driver, surugaya_ids, seen_surugaya):
+    print("[SURUGAYA] Revisión de stock iniciada...")
+    check_surugaya(driver, surugaya_ids, seen_surugaya)
+    print("[SURUGAYA] Revisión finalizada")
+
+
+
 # --- MAIN ---
 def main():
     seen_files = {
@@ -268,36 +403,41 @@ def main():
     }
 
     seen = {source: load_seen(file) for source, file in seen_files.items()}
+    seen_surugaya = load_seen(SURUGAYA_SEEN_FILE)
+    surugaya_ids = load_surugaya_ids()
 
     driver = init_driver()
+    driver_surugaya_1 = init_driver()
+    driver_surugaya_2 = init_driver()
+    last_surugaya_check = 0
+    last_others_check = 0
+    surugaya_thread = None
+    
     try:
         while True:
-            all_products = {
-                "mercari": fetch_products(driver, [
-                    "https://jp.mercari.com/search?keyword=%20%E3%82%A4%E3%83%8A%E3%82%BA%E3%83%9E%E3%82%A4%E3%83%AC%E3%83%96%E3%83%B3&order=desc&sort=created_time",
-                    "https://jp.mercari.com/search?keyword=%20%E3%82%A4%E3%83%8A%E3%82%BA%E3%83%9E%E3%82%A4%E3%83%AC%E3%83%96%E3%83%B3TCG&order=desc&sort=created_time"
-                ]),
-                "fril": fetch_fril(driver),
-                "neokyo": fetch_neokyo(driver)
-                # "yahoo": fetch_yahoo_auctions(driver)
-            }
+            check_new_products_and_send_message(seen, seen_files, "mercari", fetch_products(driver_surugaya_1, 
+                    "https://jp.mercari.com/search?keyword=%20%E3%82%A4%E3%83%8A%E3%82%BA%E3%83%9E%E3%82%A4%E3%83%AC%E3%83%96%E3%83%B3&order=desc&sort=created_time"
+                ) )
 
-            for source, products in all_products.items():
-                found = 0
-                for p in products:
-                    if p["id"] not in seen[source]:
-                        seen[source].add(p["id"])
-                        append_seen(seen_files[source], p["id"])
-                        msg = f"Nuevo producto 🚨 ({source})\n{p['url']}\nPrecio: {p['price']}"
-                        if source == "neokyo" and "image" in p:
-                            send_telegram_photo(p["image"], caption=msg)
-                        else:
-                            send_telegram_message(msg)
-                        print("[NOTIF]", msg)
-                        found += 1
-                if found == 0:
-                    print(f"[INFO] Sin nuevos productos en {source}.")
-            
+            check_new_products_and_send_message(seen, seen_files, "mercari", fetch_products(driver_surugaya_2,
+                    "https://jp.mercari.com/search?keyword=%20%E3%82%A4%E3%83%8A%E3%82%BA%E3%83%9E%E3%82%A4%E3%83%AC%E3%83%96%E3%83%B3TCG&order=desc&sort=created_time"
+                ) )
+
+            if time.time() - last_others_check >= OTHERS_INTERVAL:
+                check_new_products_and_send_message(seen, seen_files, "fril", fetch_fril(driver))
+                check_new_products_and_send_message(seen, seen_files, "neokyo", fetch_neokyo(driver))
+                last_others_check = time.time()
+
+            if time.time() - last_surugaya_check >= SURUGAYA_INTERVAL:
+                if surugaya_thread is None or not surugaya_thread.is_alive():
+                    surugaya_thread = threading.Thread(
+                        target=surugaya_worker,
+                        args=(driver, surugaya_ids, seen_surugaya),
+                        daemon=True
+                    )
+                    surugaya_thread.start()
+                    last_surugaya_check = time.time()
+
             time.sleep(CHECK_INTERVAL)
     finally:
         driver.quit()
