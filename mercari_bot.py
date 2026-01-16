@@ -97,55 +97,6 @@ def fetch_fril(driver):
         products.append({"id": pid, "url": href, "price": price_text})
     return products
 
-def fetch_neokyo(driver):
-    URL = "https://neokyo.com/es/search/yahooFleaMarket?provider=yahooFleaMarket&translate=1&order-tag=openTime&order-direction=DESC&keyword=inazuma+eleven"
-    JPY_TO_EUR = 0.0062
-    driver.get(URL)
-    try:
-        wait = WebDriverWait(driver, WAIT_SECONDS)
-        wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.products-listing")))
-    except:
-        pass
-
-    product_cards = driver.find_elements(By.CSS_SELECTOR, "div.product-card")
-    products = []
-
-    for card in product_cards:
-        # Get the link from the 'a' tag within the current product card.
-        try:
-            a_tag = card.find_element(By.CSS_SELECTOR, "a.product-link")
-            href = a_tag.get_attribute("href")
-            # Extract the product ID from the URL.
-            pid = href.rstrip("/").split("/")[-1]
-
-            # --- Get the image URL ---
-            image_tag = card.find_element(By.CSS_SELECTOR, "img.card-img-top")
-            image_url = image_tag.get_attribute("src")
-        except NoSuchElementException:
-            # Skip if no link is found for the product card.
-            continue
-        
-        # Get the price from the 'h5' tag within the '.buy' div.
-        try:
-            price_element = card.find_element(By.CSS_SELECTOR, "div[class*='buy'] > h5")
-            price_text_raw = price_element.text
-            # Clean the text and convert to a number.
-            number = int(price_text_raw.split()[0].replace(",", ""))
-            eur = round(number * JPY_TO_EUR, 2)
-            price_text = f"{number} Yen (~{eur} €)"
-        except (NoSuchElementException, IndexError, ValueError):
-            price_text = "desconocido"
-        
-        # Add the collected information to the products list.
-        products.append({
-            "id": pid,
-            "url": href,
-            "price": price_text,
-            "image": image_url 
-        })
-        
-    return products
-
 def fetch_yahoo_auctions(driver):
     URL = "https://auctions.yahoo.co.jp/search/search?p=%E3%82%A4%E3%83%8A%E3%82%BA%E3%83%9E%E3%82%A4%E3%83%AC%E3%83%96%E3%83%B3&va=%E3%82%A4%E3%83%8A%E3%82%BA%E3%83%9E%E3%82%A4%E3%83%AC%E3%83%96%E3%83%B3&is_postage_mode=1&dest_pref_code=13&b=1&n=50&s1=new&o1=d"
     JPY_TO_EUR = 0.0062  # mismo que los demás
@@ -312,7 +263,6 @@ def append_seen(file, pid):
 
 # --- SURUGAYA ---
 SURUGAYA_FILE = "surugaya_ids.txt"
-SURUGAYA_SEEN_FILE = "seen_surugaya_available.txt"
 
 def load_surugaya_ids():
     if not os.path.exists(SURUGAYA_FILE):
@@ -321,7 +271,7 @@ def load_surugaya_ids():
     with open(SURUGAYA_FILE, "r", encoding="utf-8") as f:
         return [line.strip() for line in f if line.strip()]
 
-def check_surugaya(driver, ids, seen_available):
+def check_surugaya(driver, ids):
     base_url = "https://neokyo.com/es/product/surugaya/"
     newly_available = []
 
@@ -336,7 +286,7 @@ def check_surugaya(driver, ids, seen_available):
             spans = driver.find_elements(By.CSS_SELECTOR, "span.text-success")
             available = any("Disponible" in s.text for s in spans)
 
-            if available and pid not in seen_available:
+            if available:
                 msg = f"✅ Producto disponible en Surugaya\n{url}"
                 send_telegram_message(msg)
                 print("[SURUGAYA DISPONIBLE]", pid, url)
@@ -345,10 +295,6 @@ def check_surugaya(driver, ids, seen_available):
             #     print(f"[SURUGAYA] No disponible: {pid}")
         except Exception as e:
             print(f"[SURUGAYA ERROR] {pid}: {e}")
-
-    # Guardar los nuevos disponibles
-    for pid in newly_available:
-        append_seen(SURUGAYA_SEEN_FILE, pid)
 
     return newly_available
 
@@ -386,9 +332,9 @@ def check_new_products_and_send_message(seen, seen_files, source, products):
         print(f"[INFO] Sin nuevos productos en {source}.")
 
 
-def surugaya_worker(driver, surugaya_ids, seen_surugaya):
+def surugaya_worker(driver, surugaya_ids):
     print("[SURUGAYA] Revisión de stock iniciada...")
-    check_surugaya(driver, surugaya_ids, seen_surugaya)
+    check_surugaya(driver, surugaya_ids)
     print("[SURUGAYA] Revisión finalizada")
 
 
@@ -398,12 +344,10 @@ def main():
     seen_files = {
         "mercari": "seen_products_mercar.txt",
         "fril": "seen_products_fril.txt",
-        "neokyo": "seen_products_neokyo.txt",
         "yahoo": "seen_products_yahoo.txt"
     }
 
     seen = {source: load_seen(file) for source, file in seen_files.items()}
-    seen_surugaya = load_seen(SURUGAYA_SEEN_FILE)
     surugaya_ids = load_surugaya_ids()
 
     driver = init_driver()
@@ -425,14 +369,13 @@ def main():
 
             if time.time() - last_others_check >= OTHERS_INTERVAL:
                 check_new_products_and_send_message(seen, seen_files, "fril", fetch_fril(driver))
-                check_new_products_and_send_message(seen, seen_files, "neokyo", fetch_neokyo(driver))
                 last_others_check = time.time()
 
             if time.time() - last_surugaya_check >= SURUGAYA_INTERVAL:
                 if surugaya_thread is None or not surugaya_thread.is_alive():
                     surugaya_thread = threading.Thread(
                         target=surugaya_worker,
-                        args=(driver, surugaya_ids, seen_surugaya),
+                        args=(driver, surugaya_ids),
                         daemon=True
                     )
                     surugaya_thread.start()
