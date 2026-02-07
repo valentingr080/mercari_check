@@ -2,9 +2,12 @@
 import time
 import threading
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
+from typing import Optional
+import os
+
+from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 
 from config import (
     HEADLESS, WAIT_SECONDS,
@@ -25,9 +28,11 @@ from scrapers.inazuma_shopify import InazumaShopifyScraper
 from scrapers.jdirectauctions import JDirectAuctionsScraper  # <-- NEW
 
 
-def init_driver(proxy: str | None = None):
+def init_driver(proxy: Optional[str] = None):
     opts = Options()
+
     if HEADLESS:
+        # "new" is fine on modern Chrome; if it ever causes issues, switch to "--headless"
         opts.add_argument("--headless=new")
 
     opts.add_argument("--no-sandbox")
@@ -43,9 +48,18 @@ def init_driver(proxy: str | None = None):
     if proxy:
         opts.add_argument(f"--proxy-server=http://{proxy}")
 
-    service = Service(ChromeDriverManager().install())
-    return webdriver.Chrome(service=service, options=opts)
+    # ✅ Preferred: Selenium Manager (Selenium >= 4.6)
+    # This avoids webdriver_manager and usually fixes arch issues automatically.
+    #
+    # ✅ Optional fallback: if you set CHROMEDRIVER=/path/to/chromedriver,
+    # it will use that.
+    chromedriver_path = os.environ.get("CHROMEDRIVER")
+    if chromedriver_path:
+        service = Service(chromedriver_path)
+        return webdriver.Chrome(service=service, options=opts)
 
+    # Selenium Manager path (no Service passed)
+    return webdriver.Chrome(options=opts)
 
 def format_message(source: str, product):
     title = ""
