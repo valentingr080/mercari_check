@@ -240,21 +240,21 @@ def main():
     )
 
     threads = [
-        threading.Thread(
-            target=scraper_worker,
-            args=("mercari_1", mercari_1, stores["mercari_1"], notifier, CHECK_INTERVAL, stop_event),
-            daemon=True,
-        ),
-        threading.Thread(
-            target=scraper_worker,
-            args=("mercari_2", mercari_2, stores["mercari_2"], notifier, CHECK_INTERVAL, stop_event),
-            daemon=True,
-        ),
-        threading.Thread(
-            target=scraper_worker,
-            args=("fril", fril, stores["fril"], notifier, OTHERS_INTERVAL, stop_event),
-            daemon=True,
-        ),
+        # threading.Thread(
+        #     target=scraper_worker,
+        #     args=("mercari_1", mercari_1, stores["mercari_1"], notifier, CHECK_INTERVAL, stop_event),
+        #     daemon=True,
+        # ),
+        # threading.Thread(
+        #     target=scraper_worker,
+        #     args=("mercari_2", mercari_2, stores["mercari_2"], notifier, CHECK_INTERVAL, stop_event),
+        #     daemon=True,
+        # ),
+        # threading.Thread(
+        #     target=scraper_worker,
+        #     args=("fril", fril, stores["fril"], notifier, OTHERS_INTERVAL, stop_event),
+        #     daemon=True,
+        # ),
         # threading.Thread(
         #     target=scraper_worker,
         #     args=("yahoo", yahoo, stores["yahoo"], notifier, OTHERS_INTERVAL, stop_event),
