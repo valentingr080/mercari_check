@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 from typing import Optional
+from datetime import datetime
 
 import requests
 from bs4 import BeautifulSoup
@@ -83,30 +84,44 @@ class SurugayaAvailabilityScraper2(Scraper):
             return [line.strip() for line in f if line.strip()]
 
     def fetch(self) -> list[Product]:
+        print(f"[FETCH STARTED] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         notifier = TelegramNotifier(TELEGRAM_TOKEN, CHAT_ID)
         ids = self._load_ids()
         available: list[Product] = []
 
         for pid in ids:
-            try:
-                result = fetch_surugaya_stock( pid, session=self._session, timeout=self.wait_seconds, user_agent=self.user_agent, proxies=self.proxies, )
-                if not result:
-                    continue
+            # Build list of IDs to try
+            pids_to_try = [pid]
 
-                is_available, price_text = result
-                if is_available:
-                    # available.append(
-                    #     Product(
-                    #         id=pid,
-                    #         url=f"https://www.suruga-ya.jp/product/detail/{pid}",
-                    #         price=price_text or "Disponible",
-                    #     )
-                    # )
-                    message = f"✅ Producto disponible en Surugaya\nhttps://www.suruga-ya.jp/product/detail/{pid}"
-                    notifier.send_message(message)
-                    # notifier.send_strong_alert(message)
+            if pid.startswith("G"):
+                alt_pid = "B" + pid[1:]
+                pids_to_try.append(alt_pid)
 
-            except Exception as e:
-                print(f"[SURUGAYA2 ERROR] {pid}: {e}")
+            for current_pid in pids_to_try:
+                try:
+                    result = fetch_surugaya_stock(
+                        current_pid,
+                        session=self._session,
+                        timeout=self.wait_seconds,
+                        user_agent=self.user_agent,
+                        proxies=self.proxies,
+                    )
 
+                    if not result:
+                        continue
+
+                    is_available, price_text = result
+
+                    if is_available:
+                        message = (
+                            f"✅ Producto disponible en Surugaya\n"
+                            f"https://www.suruga-ya.jp/product/detail/{current_pid}"
+                        )
+                        notifier.send_message(message)
+                        notifier.send_strong_alert(message)
+
+                except Exception as e:
+                    print(f"[SURUGAYA2 ERROR] {current_pid}: {e}")
+
+        print(f"[FETCH FINISHED] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         return available

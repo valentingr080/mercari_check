@@ -269,11 +269,11 @@ def main():
             args=("surugaya", surugaya, stores["surugaya"], notifier, SURUGAYA_INTERVAL, stop_event),
             daemon=True,
         ),
-        threading.Thread(
-            target=scraper_worker,
-            args=("inazuma_shopify", inazuma_shopify, stores["inazuma_shopify"], notifier, OTHERS_INTERVAL, stop_event),
-            daemon=True,
-        ),
+        # threading.Thread(
+        #     target=scraper_worker,
+        #     args=("inazuma_shopify", inazuma_shopify, stores["inazuma_shopify"], notifier, OTHERS_INTERVAL, stop_event),
+        #     daemon=True,
+        # ),
     ]
 
     for t in threads:
