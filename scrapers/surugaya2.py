@@ -104,7 +104,7 @@ class SurugayaAvailabilityScraper2(Scraper):
                     # )
                     message = f"✅ Producto disponible en Surugaya\nhttps://www.suruga-ya.jp/product/detail/{pid}"
                     notifier.send_message(message)
-                    notifier.send_strong_alert(message)
+                    # notifier.send_strong_alert(message)
 
             except Exception as e:
                 print(f"[SURUGAYA2 ERROR] {pid}: {e}")
