@@ -41,12 +41,15 @@ def init_driver(proxy: Optional[str] = None):
         opts.add_argument("--headless=new")
         opts.add_argument("--window-size=1920,1080")
 
-    # Server stability flags
     opts.add_argument("--no-sandbox")
     opts.add_argument("--disable-dev-shm-usage")
     opts.add_argument("--disable-gpu")
 
-    # Force snap Chromium binary
+    # Helpful logging
+    opts.add_argument("--enable-logging")
+    opts.add_argument("--v=1")
+    opts.add_argument("--log-path=chrome.log")
+
     if platform.system().lower() == "linux":
         opts.binary_location = "/snap/bin/chromium"
 
@@ -55,9 +58,10 @@ def init_driver(proxy: Optional[str] = None):
             proxy = "http://" + proxy
         opts.add_argument(f"--proxy-server={proxy}")
 
-    # IMPORTANT: no Service() here
-    return webdriver.Chrome(options=opts)
+    service = Service(log_output="chromedriver.log")
+    service.command_line_args().append("--verbose")
 
+    return webdriver.Chrome(service=service, options=opts)
 def format_message(source: str, product):
     title = ""
     if product.extra and isinstance(product.extra, dict):
