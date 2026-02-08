@@ -51,6 +51,7 @@ def init_driver(proxy: Optional[str] = None):
     opts.add_argument("--log-path=chrome.log")
 
     if platform.system().lower() == "linux":
+        opts.add_argument("--user-data-dir=/tmp/chrome-profile")
         opts.binary_location = "/snap/bin/chromium"
 
     if proxy:
