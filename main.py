@@ -41,28 +41,25 @@ def init_driver(proxy: Optional[str] = None):
         opts.add_argument("--headless=new")
         opts.add_argument("--window-size=1920,1080")
 
+    # Stability flags for servers
     opts.add_argument("--no-sandbox")
     opts.add_argument("--disable-dev-shm-usage")
     opts.add_argument("--disable-gpu")
 
-    # Helpful logging
-    opts.add_argument("--enable-logging")
-    opts.add_argument("--v=1")
-    opts.add_argument("--log-path=chrome.log")
+    # Optional but useful
+    opts.add_argument("--disable-blink-features=AutomationControlled")
 
     if platform.system().lower() == "linux":
-        opts.add_argument("--user-data-dir=/tmp/chrome-profile")
-        opts.binary_location = "/snap/bin/chromium"
+        opts.binary_location = "/usr/bin/google-chrome"
 
     if proxy:
         if "://" not in proxy:
             proxy = "http://" + proxy
         opts.add_argument(f"--proxy-server={proxy}")
 
-    service = Service(log_output="chromedriver.log")
-    service.command_line_args().append("--verbose")
+    return webdriver.Chrome(options=opts)
 
-    return webdriver.Chrome(service=service, options=opts)
+
 def format_message(source: str, product):
     title = ""
     if product.extra and isinstance(product.extra, dict):
