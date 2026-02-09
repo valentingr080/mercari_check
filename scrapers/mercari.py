@@ -40,6 +40,11 @@ class MercariScraper(Scraper):
                 href = a.get_attribute("href")
                 pid = href.rstrip("/").split("/")[-1]
 
+                name = li.find_element( By.CSS_SELECTOR, "span[data-testid='thumbnail-item-name']").text.strip()
+                upper_name = name.upper()
+                if "3DS" in upper_name or "DS" in upper_name:
+                    continue
+
                 price_block = li.find_element(By.CSS_SELECTOR, "span.merPrice")
                 currency = price_block.find_element(By.CSS_SELECTOR, "span[class^='currency']").text.strip()
                 number = price_block.find_element(By.CSS_SELECTOR, "span[class^='number']").text.strip().replace(",", "")

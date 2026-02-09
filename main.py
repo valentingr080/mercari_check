@@ -239,21 +239,21 @@ def main():
     )
 
     threads = [
-        # threading.Thread(
-        #     target=scraper_worker,
-        #     args=("mercari_1", mercari_1, stores["mercari_1"], notifier, CHECK_INTERVAL, stop_event),
-        #     daemon=True,
-        # ),
-        # threading.Thread(
-        #     target=scraper_worker,
-        #     args=("mercari_2", mercari_2, stores["mercari_2"], notifier, CHECK_INTERVAL, stop_event),
-        #     daemon=True,
-        # ),
-        # threading.Thread(
-        #     target=scraper_worker,
-        #     args=("fril", fril, stores["fril"], notifier, OTHERS_INTERVAL, stop_event),
-        #     daemon=True,
-        # ),
+        threading.Thread(
+            target=scraper_worker,
+            args=("mercari_1", mercari_1, stores["mercari_1"], notifier, CHECK_INTERVAL, stop_event),
+            daemon=True,
+        ),
+        threading.Thread(
+            target=scraper_worker,
+            args=("mercari_2", mercari_2, stores["mercari_2"], notifier, CHECK_INTERVAL, stop_event),
+            daemon=True,
+        ),
+        threading.Thread(
+            target=scraper_worker,
+            args=("fril", fril, stores["fril"], notifier, OTHERS_INTERVAL, stop_event),
+            daemon=True,
+        ),
         # threading.Thread(
         #     target=scraper_worker,
         #     args=("yahoo", yahoo, stores["yahoo"], notifier, OTHERS_INTERVAL, stop_event),
@@ -264,16 +264,16 @@ def main():
         #     args=("jdirectauctions", jdirect, stores["jdirectauctions"], notifier, JDIRECT_INTERVAL, stop_event),
         #     daemon=True,
         # ),
-        threading.Thread(
-            target=scraper_worker,
-            args=("surugaya", surugaya, stores["surugaya"], notifier, SURUGAYA_INTERVAL, stop_event),
-            daemon=True,
-        ),
         # threading.Thread(
         #     target=scraper_worker,
-        #     args=("inazuma_shopify", inazuma_shopify, stores["inazuma_shopify"], notifier, OTHERS_INTERVAL, stop_event),
+        #     args=("surugaya", surugaya, stores["surugaya"], notifier, SURUGAYA_INTERVAL, stop_event),
         #     daemon=True,
         # ),
+        threading.Thread(
+            target=scraper_worker,
+            args=("inazuma_shopify", inazuma_shopify, stores["inazuma_shopify"], notifier, OTHERS_INTERVAL, stop_event),
+            daemon=True,
+        ),
     ]
 
     for t in threads:
