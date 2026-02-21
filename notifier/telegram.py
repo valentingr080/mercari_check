@@ -1,6 +1,7 @@
 # notifier/telegram.py
 import requests
-import time
+import io
+import requests
 
 class TelegramNotifier:
     def __init__(self, token: str, chat_id: str, timeout: int = 15):
@@ -49,6 +50,60 @@ class TelegramNotifier:
             raise RuntimeError(f"Telegram sendPhoto failed: {data}")
 
         return data
+
+    def send_photo_download(self, photo_url: str, caption: str = ""):
+        tg_url = f"https://api.telegram.org/bot{self.token}/sendPhoto"
+
+        try:
+            img_resp = requests.get(
+                photo_url,
+                headers={
+                    "User-Agent": "Mozilla/5.0",
+                    "Referer": "https://paypayfleamarket.yahoo.co.jp/",
+                    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+                },
+                timeout=self.timeout,
+                stream=True,
+            )
+            img_resp.raise_for_status()
+            img_bytes = img_resp.content
+
+        except Exception as e:
+            print("[TELEGRAM][sendPhotoUpload] PHOTO_URL:", photo_url)
+            print("[TELEGRAM][sendPhotoUpload] download failed:", repr(e))
+            raise RuntimeError(f"Failed to download photo for Telegram upload: {e}") from e
+
+        data = {"chat_id": self.chat_id}
+        if caption:
+            data["caption"] = caption[:1024]
+
+        content_type = img_resp.headers.get("Content-Type", "image/jpeg")
+        ext = "jpg"
+        if "png" in content_type:
+            ext = "png"
+        elif "webp" in content_type:
+            ext = "webp"
+        elif "gif" in content_type:
+            ext = "gif"
+
+        files = {
+            "photo": (f"photo.{ext}", io.BytesIO(img_bytes), content_type)
+        }
+
+        r = requests.post(tg_url, data=data, files=files, timeout=self.timeout)
+
+        try:
+            resp_data = r.json()
+        except Exception:
+            resp_data = {"ok": False, "description": f"Non-JSON response: {r.text[:500]}"}
+
+        if not r.ok or not resp_data.get("ok"):
+            print("[TELEGRAM][sendPhotoUpload] PHOTO_URL:", photo_url)
+            print("[TELEGRAM][sendPhotoUpload] HTTP:", r.status_code)
+            print("[TELEGRAM][sendPhotoUpload] RESP:", r.text[:1000])
+            raise RuntimeError(f"Telegram sendPhoto(upload) failed: {resp_data}")
+
+        return resp_data
 
     def send_strong_alert(self, text: str):
         r = requests.post(
