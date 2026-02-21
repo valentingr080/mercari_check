@@ -16,4 +16,5 @@ def get_dpop():
         dpop = headers.get("dpop")
 
         browser.close()
+        print(dpop)
         return dpop
