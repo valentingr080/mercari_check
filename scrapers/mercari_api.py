@@ -93,6 +93,7 @@ class MercariApiScraper(Scraper):
 
             # If failed → refresh DPoP and retry once
             if resp.status_code != 200:
+                print(resp)
                 print(f"DPoP likely expired. Refreshing... ({resp.status_code})")
 
                 self._dpop = get_dpop()  # refresh token
