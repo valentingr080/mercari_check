@@ -1,9 +1,10 @@
 # scrapers/mercari_api.py
 from __future__ import annotations
 from utils.dpop import get_dpop
+from curl_cffi import requests as requests  # drop-in
 
 import os
-import requests
+# import requests
 from typing import Optional, Any
 
 from scrapers.base import Scraper, Product
@@ -27,7 +28,7 @@ class MercariApiScraper(Scraper):
         self.page_size = page_size
         self.max_pages = max_pages
         self.timeout_seconds = wait_seconds
-        self.session = requests.Session()
+        self.session = requests.Session(impersonate="chrome120")
         self._dpop: Optional[str] = None
 
     def _headers(self) -> dict:
@@ -44,7 +45,7 @@ class MercariApiScraper(Scraper):
             "User-Agent": "Mozilla/5.0",
             "X-Country-Code": "JP",
             "X-Platform": "web",
-            "Dpop": self._dpop,
+            "DPoP": self._dpop,
         }
 
     def fetch(self) -> list[Product]:
