@@ -33,6 +33,7 @@ class MercariApiScraper(Scraper):
     def _headers(self) -> dict:
         if not self._dpop:
             self._dpop = get_dpop()
+            print(self._dpop)
 
         return {
             "Accept": "application/json, text/plain, */*",
@@ -95,6 +96,7 @@ class MercariApiScraper(Scraper):
                 print(f"DPoP likely expired. Refreshing... ({resp.status_code})")
 
                 self._dpop = get_dpop()  # refresh token
+                print(self._dpop)
 
                 resp = self.session.post(
                     self.API_URL,
