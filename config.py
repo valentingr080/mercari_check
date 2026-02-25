@@ -18,5 +18,5 @@ CURRENCY_RATES = {
     "USD": 0.93,
 }
 
-# SHOP_CONFIG_URL="https://gist.githubusercontent.com/valentingr080/a90098f581a82ec56146a93450ec8c02/raw/gistfile1.txt" # for the bot
-SHOP_CONFIG_URL="https://gist.githubusercontent.com/valentingr080/cf55d74532a566d1271fe169af7f8d35/raw/shops_config.txt" # for me
+SHOP_CONFIG_URL="https://gist.githubusercontent.com/valentingr080/a90098f581a82ec56146a93450ec8c02/raw/gistfile1.txt" # for the bot
+# SHOP_CONFIG_URL="https://gist.githubusercontent.com/valentingr080/cf55d74532a566d1271fe169af7f8d35/raw/shops_config.txt" # for me
